@@ -198,6 +198,12 @@ var crafting_table_recipes = []Recipe{
         toc:   []int32{4},
     },
     {
+        from:  []BlockID{FLESH},
+        fromc: []int32{1},
+        to:    []BlockID{PLANK},
+        toc:   []int32{4},
+    },
+    {
         from:  []BlockID{PLANK},
         fromc: []int32{4},
         to:    []BlockID{CRAFTING_TABLE},
@@ -367,7 +373,8 @@ var (
 
     breakingBlocks []struct{x, y, z, t, id, elapsed int}
 
-    TICK uint32 = DAY_LEN/2
+    //~ TICK uint32 = DAY_LEN/2
+    TICK uint32 = DAY_LEN/4
     sceneTex uint32
     blurTex uint32
     openInventory bool = false
@@ -1545,6 +1552,8 @@ func PlayWav(ctx *malgo.AllocatedContext, filename string) {
 
 func main() {
     
+
+/*
     if len(os.Args) > 1 {
         switch (os.Args[1]) {
             
@@ -1562,9 +1571,10 @@ Options:
                 os.Exit(0)
             default:
         }
-        
     }
-    
+*/
+
+
     if err := glfw.Init(); err != nil {
         log.Fatalln("failed to initialize glfw:", err)
     }
@@ -1610,7 +1620,7 @@ Options:
     }
     
     playerInventoryInsert(CRAFTING_TABLE, 1)
-    //~ playerInventoryInsert(CANDLE, 1)
+    playerInventoryInsert(CANDLE, 1)
     //~ playerInventoryInsert(STICK, 1)
     //~ playerInventoryInsert(GRASS_TUFF, 1)
     //~ playerInventoryInsert(LAVENDER, 1)
@@ -1799,6 +1809,8 @@ Options:
 
 func MainMenu (window *glfw.Window) {
     
+    var state int = 0
+    
     for !window.ShouldClose() {
 
         AdjustResolution(window)
@@ -1812,7 +1824,6 @@ func MainMenu (window *glfw.Window) {
         gl.MatrixMode(gl.MODELVIEW)
         gl.PushMatrix()
         gl.LoadIdentity()
-
 
         gl.ClearColor(0.529, 0.808, 1.0, 1.0)
         gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
@@ -1839,16 +1850,26 @@ func MainMenu (window *glfw.Window) {
         gl.BindTexture(gl.TEXTURE_2D, atlas)        
         gl.Begin(gl.QUADS)
         
-        DrawText([]byte("dmc public release 1"), 0, 5,float32(0.05))
         
-        for k, _ := range menu {
-            if k < 2 {
-                gl.Color3f(0.75, 0.75, 0.75)
-                } else {
-                gl.Color3f(1.0, 1.0, 1.0)
+        if state == 0 {
+        
+            DrawText([]byte("dmc pre 2"), 0, 5,float32(0.05))
+            
+            for k, _ := range menu {
+                if k < 2 {
+                    gl.Color3f(0.75, 0.75, 0.75)
+                    } else {
+                    gl.Color3f(1.0, 1.0, 1.0)
+                }
+                DrawText(menu[k], 0, float32(k),float32(0.05))
             }
-            DrawText(menu[k], 0, float32(k),float32(0.05))
+            
+        } else if state == 1 {
+            
+            
+            
         }
+    
         gl.End()
         
         gl.Color3f(1.0, 1.0, 1.0)
@@ -1862,10 +1883,14 @@ func MainMenu (window *glfw.Window) {
 
         window.SwapBuffers()
         glfw.PollEvents()
-        //~ if window.GetKey(glfw.KeyEscape) == glfw.Press {
+
         if (window.GetKey(glfw.KeyEnter) == glfw.Release) {
             break
         }
+        if (window.GetKey(glfw.KeyEscape) == glfw.Release) {
+            os.Exit(0)
+        }
+
     }
 }
 
@@ -2130,7 +2155,14 @@ func processMobs() {
         }
         
         
-        gl.Color3f(1.0,1.0,1.0)
+        
+        
+        {
+            light := getLightVal(int(v.pos.x),int(v.pos.y)+1,int(v.pos.z))
+            lv := float32(lightLevels - light) / float32(lightLevels)
+            gl.Color3f(lv,lv,lv)
+        }
+        
         if v.id == MOBID_DUCK {
             a := angle_to_entity(v.pos, v.dir, player_pos)
             pi := float32(3.14)
@@ -2156,6 +2188,9 @@ func processMobs() {
             Entities[w] = v
             w++
         }
+        
+        gl.Color3f(1.0,1.0,1.0)
+        
     }
     Entities = Entities[:w]
     
@@ -2593,6 +2628,11 @@ func BlockRandomUpdates(c *Chunk, p iVec2) {
                     //~ *b = AIR;
                 //~ }
                 //~ ChunkUpdateDisplayListRef(c);
+            case FLESH:
+                if c.block[i][j+1][k] == AIR {
+                    c.block[i][j+1][k] = FLESH
+                    ChunkUpdateDisplayListRef(c);
+                }
             case SAPLING:
                 putTree(p.x+i,j,p.y+k)
             }
@@ -2621,18 +2661,20 @@ func lightUpdate(c *Chunk, p iVec2, sunlight uint8) {
                 dy := k
                 dz := p.y+j
                 b := getBlockVal(dx,dy,dz)
-                if !hitopaque {
+
+                if (b == CANDLE) || (b == LILY) || (b == PIXIE) {
+                    setLightVal(dx, dy, dz, 0)
+
+                    if (i > 0) && (i < SUBCHUNK_H) && (j > 0) && (j < SUBCHUNK_H) {
+                        LightSources = append(LightSources, [3]int{i, j, k})                        
+                    }
+                } else if !hitopaque {
                     setLightVal(dx, dy, dz, sunlight)
                     if (b != AIR) && (b != ICE) && (b != FLOWER) {
                         hitopaque = true
                     }
-                } else if b == CANDLE {
-                    setLightVal(dx, dy, dz, 0)
-                    LightSources = append(LightSources, [3]int{i, j, k})
-                } else if b == LILY {
-                    setLightVal(dx, dy, dz, 0)
                 } else {
-                    setLightVal(dx, dy, dz, lightLevels)
+                    setLightVal(dx, dy, dz, lightLevels-1)
                     if (b == AIR) || BlockIsLiquid[b] || (b == FLOWER) || (b == ICE) {
                         AirIndexes[i+overdraw][j+overdraw] = append(AirIndexes[i+overdraw][j+overdraw], k)
                     }
@@ -2640,6 +2682,25 @@ func lightUpdate(c *Chunk, p iVec2, sunlight uint8) {
             }
         }
     }
+    
+    
+    
+    /* add an lightlevels x lightlevels x lightlevels area to the 
+     * calculated light values around artificial light sources 
+    */
+    for _, v := range LightSources {
+        for i := -lightLevels+1; i < (lightLevels-1); i++ {
+            for j := -lightLevels+1; j < (lightLevels-1); j++ {
+                for k := -lightLevels+1; k < (lightLevels-1); k++ {
+                    if (i == 0) && (j == 0) && (k == 0) {
+                        continue
+                    }
+                    AirIndexes[v[0]+i+overdraw][v[1]+j+overdraw] = append(AirIndexes[v[0]+i+overdraw][v[1]+j+overdraw], v[2]+k)
+                }
+            }
+        }
+    }
+    
     
     var mid time.Time
     if DEBUG {
@@ -2865,6 +2926,7 @@ func terrain(p iVec2) {
         return f
     }
     
+    
     c.display_list = 0
     World[p] = c
 
@@ -2873,7 +2935,23 @@ func terrain(p iVec2) {
         saveReadChunk(c, p)
         return
     }
+
+
+
+
+    /* brick pillar */
+    if (psrng2d(p.x, p.y) % 2000) == 0 {        
+        for i := 0;  i < SUBCHUNK_H; i++ {
+            for j := 0;  j < CHUNK_V; j++ {
+                for k := 0;  k < SUBCHUNK_H; k++ {
+                    c.block[i][j][k] = BRICK
+                }
+            }
+        }
+        return
+    } 
     
+
     vegetationNoise := func (nx, nz int) (uint32, bool) {
         var foo uint32
         var bar bool = false
@@ -2939,16 +3017,17 @@ func terrain(p iVec2) {
 
     var seaBottom int = (CHUNK_V/2) - offset*2
     
+    
+    var seaLevel int
+    
     for i := 0; i < SUBCHUNK_H; i++ {
         for k := 0; k < SUBCHUNK_H; k++ {
             
             var erosion bool = noise2d(float32(p.x+i)/10.0,float32(p.y+k)/10.0) > 0.80
             
-            
             var nx = p.x + i
             var nz = p.y + k
-
-            var seaLevel int
+            
             var continentality int
             {
                 n, c := seaLevelVariation(nx, nz)
@@ -2966,13 +3045,13 @@ func terrain(p iVec2) {
             for j := 0; j < (CHUNK_V-5); j++ {
                 
                 placeStone := func() {
-                    //~ cavescale := float32(50)
-                    //~ n := noise3d(float32(nx+1333)/cavescale, float32(j)/(cavescale/3.0), float32(nz-1888)/cavescale)
-                    //~ nn := float32(0.01)
-                    //~ if (n > (0.5 - nn)) && (n < (0.5 + nn)) {
-                        //~ c.block[i][j][k] = OBSCURE
-                        //~ return
-                    //~ }
+                    cavescale := float32(50)
+                    n := noise3d(float32(nx+1333)/cavescale, float32(j)/(cavescale/3.0), float32(nz-1888)/cavescale)
+                    nn := float32(0.01)
+                    if (n > (0.5 - nn)) && (n < (0.5 + nn)) {
+                        c.block[i][j][k] = AIR
+                        return
+                    }
                     
                     
                     const (
@@ -3135,7 +3214,41 @@ func terrain(p iVec2) {
         }
     }
 
-    
+
+    /* catacomb generation */
+    {
+        scale := float32(100.0)
+        if noise2d((float32(p.x+12323))/scale, float32(p.y-12323)/scale) > 0.75 {
+            
+            h := 16
+            y_level := (CHUNK_V/2) - 40 - h
+            
+            for i := 1;  i < (SUBCHUNK_H-1); i++ {
+                for j := 0;  j < h; j++ {
+                    for k := 1;  k < (SUBCHUNK_H-1); k++ {
+                        
+                        c.block[i][j+y_level][k] = AIR
+                    }
+                }
+            }
+            c.block[SUBCHUNK_H/2][y_level  ][0] = AIR
+            c.block[SUBCHUNK_H/2][y_level+1][0] = AIR
+            
+            c.block[SUBCHUNK_H/2][y_level][SUBCHUNK_H-1] = AIR
+            c.block[SUBCHUNK_H/2][y_level+1][SUBCHUNK_H-1] = AIR
+            
+            c.block[0][y_level  ][SUBCHUNK_H/2] = AIR
+            c.block[0][y_level+1][SUBCHUNK_H/2] = AIR
+
+            c.block[SUBCHUNK_H-1][y_level  ][SUBCHUNK_H/2] = AIR
+            c.block[SUBCHUNK_H-1][y_level+1][SUBCHUNK_H/2] = AIR
+
+            
+        }
+    }
+
+
+
     for _, v := range scheduleTree {
         
         trunk := int(rand.Uint32()) %10
@@ -3872,13 +3985,15 @@ func drawScene() {
     //~ day_cycle := []uint8{0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}
     light = day_cycle[ int(tick%DAY_LEN) / int(DAY_LEN/len(day_cycle)) ] 
     
-    if lastLightUpdate > (DAY_LEN/uint32(len(day_cycle))) {
+    //~ if lastLightUpdate > (DAY_LEN/uint32(len(day_cycle))) {
+    
+    if (TICK % (DAY_LEN/uint32(len(day_cycle)))) == 0 {
         for _, v := range World {
             v.scheduledForLightUpdate = true
         }
-        lastLightUpdate = 0
+        //~ lastLightUpdate = 0
     }
-    lastLightUpdate++
+    //~ lastLightUpdate++
     
     start := time.Now() // capture start
 	duration := 7 * time.Millisecond
@@ -3937,15 +4052,13 @@ func drawScene() {
     gl.Enable(gl.BLEND)
     gl.BlendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA)
 
-    //~ gl.Disable(gl.BLEND)
-
     gl.DepthMask(false)
     gl.Enable(gl.TEXTURE_2D)
     gl.BindTexture(gl.TEXTURE_2D, TextureSun)
     
     
     gl.Color3f(1.0,1.0,1.0)
-    drawSkybox(0, player_pos.x, player_pos.y, player_pos.z, 200, 0,0, (PI * (float32(TICK)/float32(DAY_LEN)) )+(PI/2.0)+(PI/2.0) )
+    drawSkybox(0, player_pos.x, player_pos.y, player_pos.z, 200, 0,0, (PI * (float32(TICK)/float32(DAY_LEN)) )+(PI/2.0)+(PI/2.0)+(PI/2.0) )
 
     gl.Disable(gl.TEXTURE_2D)
     gl.DepthMask(true)
@@ -4390,7 +4503,6 @@ func DrawItemDrops() {
     gl.Disable(gl.TEXTURE_2D)
 }
 
-
 var getBlockValA *[SUBCHUNK_H][CHUNK_V][SUBCHUNK_H]BlockID
 var getBlockValP iVec2
 func getBlockVal(x, y, z int) BlockID {
@@ -4469,9 +4581,6 @@ func ChunkUpdateDisplayListRef(c *Chunk) {
         c.display_list = 0;
     }
 }
-
-
-
 
 func drawCube(id BlockID, x, y, z float32, size float32, angleX, angleY, angleZ float32) {
     
@@ -5095,7 +5204,8 @@ func AABB(x, y, z, dx, dy, dz, height, fat float32, callback func(*BlockID, int,
 
 
 const bob_speed =  2.0
-const bob_range = 0.005
+//~ const bob_range = 0.005
+const bob_range = 0.01
 var walking_bob float32
 func playerCollision(window *glfw.Window) {
 
