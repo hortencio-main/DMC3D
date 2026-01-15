@@ -118,6 +118,7 @@ const (
     SWORD
     INGOT
     LILY
+    WAX
     N_BLOCK_IDS
 )
 
@@ -170,25 +171,25 @@ var crafting_table_recipes = []Recipe{
         from:  []BlockID{STICK, PLANK},
         fromc: []int32{1,2},
         to:    []BlockID{SWORD},
-        toc:   []int32{64},
+        toc:   []int32{32},
     },
     {
         from:  []BlockID{STICK, PLANK},
         fromc: []int32{2,1},
         to:    []BlockID{SHOVEL},
-        toc:   []int32{64},
+        toc:   []int32{32},
     },
     {
         from:  []BlockID{STICK, PLANK},
         fromc: []int32{2,2},
         to:    []BlockID{AXE},
-        toc:   []int32{64},
+        toc:   []int32{32},
     },
     {
         from:  []BlockID{STICK, PLANK},
         fromc: []int32{2,3},
         to:    []BlockID{PICKAXE},
-        toc:   []int32{64},
+        toc:   []int32{32},
     },
 
     {
@@ -196,6 +197,12 @@ var crafting_table_recipes = []Recipe{
         fromc: []int32{1},
         to:    []BlockID{PLANK},
         toc:   []int32{4},
+    },
+    {
+        from:  []BlockID{COBBLE},
+        fromc: []int32{8},
+        to:    []BlockID{FURNACE},
+        toc:   []int32{1},
     },
     {
         from:  []BlockID{FLESH},
@@ -227,15 +234,33 @@ var crafting_table_recipes = []Recipe{
         to:    []BlockID{CANDLE},
         toc:   []int32{1},
     },
+    {
+        from:  []BlockID{WAX},
+        fromc: []int32{4},
+        to:    []BlockID{CANDLE},
+        toc:   []int32{1},
+    },
 }
 
 
 var furnace_recipes = []Recipe{
     {
         from:  []BlockID{ORE_IRON, ORE_COAL},
-        fromc: []int32{1},
-        to:    []BlockID{PLANK},
+        fromc: []int32{1, 1},
+        to:    []BlockID{INGOT},
         toc:   []int32{4},
+    },
+    {
+        from:  []BlockID{COBBLE, ORE_COAL},
+        fromc: []int32{1, 1},
+        to:    []BlockID{STONE},
+        toc:   []int32{1},
+    },
+    { /* note: not make another blockid just for charcoal */
+        from:  []BlockID{WOOD},
+        fromc: []int32{2},
+        to:    []BlockID{ORE_COAL},
+        toc:   []int32{1},
     },
 }
     
@@ -284,6 +309,8 @@ type Chunk struct {
     scheduledForLightUpdate bool
 
     blockInventories map[nearVec]Inventory
+    blockText map[nearVec][]byte
+    
     blockAttributes map[nearVec][]Attributes
 
     water_flow map[nearVec]struct{h, d uint8}
@@ -375,6 +402,7 @@ var (
 
     //~ TICK uint32 = DAY_LEN/2
     TICK uint32 = DAY_LEN/4
+    //~ TICK uint32 = 0
     sceneTex uint32
     blurTex uint32
     openInventory bool = false
@@ -1620,7 +1648,7 @@ Options:
     }
     
     playerInventoryInsert(CRAFTING_TABLE, 1)
-    playerInventoryInsert(CANDLE, 1)
+    //~ playerInventoryInsert(CANDLE, 1)
     //~ playerInventoryInsert(STICK, 1)
     //~ playerInventoryInsert(GRASS_TUFF, 1)
     //~ playerInventoryInsert(LAVENDER, 1)
@@ -1850,10 +1878,9 @@ func MainMenu (window *glfw.Window) {
         gl.BindTexture(gl.TEXTURE_2D, atlas)        
         gl.Begin(gl.QUADS)
         
-        
         if state == 0 {
         
-            DrawText([]byte("dmc pre 2"), 0, 5,float32(0.05))
+            DrawText([]byte("dmc"), 0, 5,float32(0.05))
             
             for k, _ := range menu {
                 if k < 2 {
@@ -1884,10 +1911,11 @@ func MainMenu (window *glfw.Window) {
         window.SwapBuffers()
         glfw.PollEvents()
 
-        if (window.GetKey(glfw.KeyEnter) == glfw.Release) {
+        if (window.GetKey(glfw.KeyEnter) == glfw.Press) {
             break
         }
-        if (window.GetKey(glfw.KeyEscape) == glfw.Release) {
+        
+        if (window.GetKey(glfw.KeyEscape) == glfw.Press) {
             os.Exit(0)
         }
 
@@ -2097,7 +2125,11 @@ func processMobs() {
     
     w := 0
     for _, v := range Entities {
-
+        if v.hp < 0 {
+            continue
+        }
+        
+        
         var walk_speed float32 = 0.1
         
         if v.state == MOB_IDLE {
@@ -2119,6 +2151,10 @@ func processMobs() {
         
         mob_aabb_callback := func(b *BlockID, x, y, z int) { }
         valid_x, valid_y, valid_z, _ = AABB(v.pos.x,v.pos.y,v.pos.z,v.dir.x,v.dir.y,v.dir.z, 1.0, 0.3, mob_aabb_callback)
+
+        if getBlockVal(int(v.pos.x),int(v.pos.y),int(v.pos.z)) == WATER {
+            v.dir.y = 0.1
+        }
 
         if v.state == MOB_JUMPING {
             
@@ -2154,9 +2190,6 @@ func processMobs() {
             v.pos.y += v.dir.y
         }
         
-        
-        
-        
         {
             light := getLightVal(int(v.pos.x),int(v.pos.y)+1,int(v.pos.z))
             lv := float32(lightLevels - light) / float32(lightLevels)
@@ -2167,21 +2200,26 @@ func processMobs() {
             a := angle_to_entity(v.pos, v.dir, player_pos)
             pi := float32(3.14)
             if ( a < 0.2 ) && ( a > 0.2 ) {
-                //~ drawBillboard(DUCK, 0, v.pos.x, v.pos.y-0.5, v.pos.z, 1.0)
                 drawBillboard(DUCK, 0, v.pos.x, v.pos.y-0.5, v.pos.z, 1.0)
             } else if ( a > 0.2 ) && ( a < (pi-0.2) ) {
-                //~ drawBillboard(DUCK, 1, v.pos.x, v.pos.y-0.5, v.pos.z, 1.0)
                 drawBillboard(DUCK, 1, v.pos.x, v.pos.y-0.5, v.pos.z, 1.0)
             } else if ( a < -0.2 ) && ( a > (-pi+0.2)) {
-                //~ drawBillboard(DUCK, 2, v.pos.x, v.pos.y-0.5, v.pos.z, 1.0)
                 drawBillboard(DUCK, 2, v.pos.x, v.pos.y-0.5, v.pos.z, 1.0)
             } else {
-                //~ drawBillboard(DUCK, 3, v.pos.x, v.pos.y-0.5, v.pos.z, 1.0)
                 drawBillboard(DUCK, 3, v.pos.x, v.pos.y-0.5, v.pos.z, 1.0)
             }
         } else if v.id == MOBID_BEE {
-            drawCube(BEE, v.pos.x, v.pos.y, 1.0, v.pos.z, 0,0,0)
-            //~ drawBillboard_fast(BEE, 0, v.pos.x, v.pos.y-0.5, v.pos.z, 1.0)
+            a := angle_to_entity(v.pos, v.dir, player_pos)
+            pi := float32(3.14)
+            if ( a < 0.2 ) && ( a > 0.2 ) {
+                drawBillboard(BEE, 0, v.pos.x, v.pos.y-0.5, v.pos.z, 1.0)
+            } else if ( a > 0.2 ) && ( a < (pi-0.2) ) {
+                drawBillboard(BEE, 1, v.pos.x, v.pos.y-0.5, v.pos.z, 1.0)
+            } else if ( a < -0.2 ) && ( a > (-pi+0.2)) {
+                drawBillboard(BEE, 2, v.pos.x, v.pos.y-0.5, v.pos.z, 1.0)
+            } else {
+                drawBillboard(BEE, 3, v.pos.x, v.pos.y-0.5, v.pos.z, 1.0)
+            }
         }
         
         if distance(v.pos,player_pos) < (SUBCHUNK_H*SUBCHUNK_H*RENDER_DISTANCE*RENDER_DISTANCE) {
@@ -2352,24 +2390,41 @@ func processBlockUpdates() {
                 {int(v[0]  ), int(v[1]+1), int(v[2]  )},
                 {int(v[0]  ), int(v[1]  ), int(v[2]+1)},
                 {int(v[0]  ), int(v[1]  ), int(v[2]-1)},
+            }            
+            var water_neighbors int = 0
+            var lava_neighbors int = 0
+            for k, _ := range n {
+                b := getBlockVal(n[k][0], n[k][1], n[k][2]);
+                if b == WATER {
+                    water_neighbors++
+                }
+                if b == LAVA {
+                    lava_neighbors++
+                }
             }
-            for i := 0; i < 4; i++ {
-                if b := getBlockRef(n[i][0], n[i][1], n[i][2]); *b == WATER {
-                    *a = WATER
-                    *b = AIR
-                    chunkUpdateDisplaylist(v[0], v[1], v[2])
-                    break
-                    bub_updateSpread(v[0], v[1], v[2])
-                }
-                if b := getBlockRef(n[i][0], n[i][1], n[i][2]); *b == LAVA {
-                    *a = LAVA
-                    *b = AIR
-                    chunkUpdateDisplaylist(v[0], v[1], v[2])
-                    break
-                    bub_updateSpread(v[0], v[1], v[2])
-                }
+            var water_can_move_here bool = false
+            var lava_can_move_here bool = false
+            switch water_neighbors {
+            case 3:
+                water_can_move_here = true
+            default:
+            }
+            switch lava_neighbors {
+            case 3:
+                lava_can_move_here = true
+            default:
             }
             
+            if water_can_move_here && lava_can_move_here {
+                *a = COBBLE
+                bub_updateSpread(v[0], v[1], v[2])
+            } else if water_can_move_here {
+                *a = WATER
+                bub_updateSpread(v[0], v[1], v[2])
+            } else if lava_can_move_here {
+                *a = LAVA
+                bub_updateSpread(v[0], v[1], v[2])
+            }
             
             
         } else if a := getBlockRef(v[0], v[1], v[2]); *a == SAND {
@@ -2377,6 +2432,22 @@ func processBlockUpdates() {
             if *b == AIR {
                 *a = AIR
                 *b = SAND
+                bub = append(bub, [3]int{v[0], v[1]-1, v[2]})
+                chunkUpdateDisplaylist( v[0], v[1], v[2])
+            }
+        } else if a := getBlockRef(v[0], v[1], v[2]); *a == GRAVEL {
+            b := getBlockRef(v[0], v[1]-1, v[2])
+            if *b == AIR {
+                *a = AIR
+                *b = GRAVEL
+                bub = append(bub, [3]int{v[0], v[1]-1, v[2]})
+                chunkUpdateDisplaylist( v[0], v[1], v[2])
+            }
+        } else if a := getBlockRef(v[0], v[1], v[2]); *a == MOON {
+            b := getBlockRef(v[0], v[1]-1, v[2])
+            if *b == AIR {
+                *a = AIR
+                *b = MOON
                 bub = append(bub, [3]int{v[0], v[1]-1, v[2]})
                 chunkUpdateDisplaylist( v[0], v[1], v[2])
             }
@@ -2426,7 +2497,7 @@ func DrawText (str []byte, x, y, s float32) {
     }
 }
     
-    
+var drop_amount int = 1
 func DrawInventory() {
     gl.Disable(gl.DEPTH_TEST)
     gl.Disable(gl.CULL_FACE);
@@ -2445,7 +2516,6 @@ func DrawInventory() {
         WOOD:           []byte("wood"),
         PLANK:          []byte("plank"),
         CRAFTING_TABLE: []byte("craft table"),
-        
         PAINTING:       []byte("painting"),
         
         SHOVEL:         []byte("shovel"),
@@ -2455,6 +2525,7 @@ func DrawInventory() {
         STICK:          []byte("stick"),
         SAPLING:        []byte("sapling"),
         CANDLE:         []byte("candle"),
+        WAX:            []byte("wax"),
         RAYTRACED_SPHERE: []byte("weird matter"),
     }
     
@@ -2487,8 +2558,6 @@ func DrawInventory() {
     }
     */
 
-    
-    
     gl.MatrixMode(gl.PROJECTION)
     //~ gl.PushMatrix() 
     gl.LoadIdentity()
@@ -2519,7 +2588,7 @@ func DrawInventory() {
     gl.Color3f(1.0, 1.0, 1.0)
     
     DrawText([]byte(fmt.Sprintf("health %d",30)),0,  -1, 1)
-    DrawText([]byte(fmt.Sprintf("drop amount %d",1)),0, -2, 1)
+    DrawText([]byte(fmt.Sprintf("drop amount %d",drop_amount)),0, -2, 1)
     DrawText([]byte(fmt.Sprintf("mood %s",Emotions[0])),0,  -3, 1)
     
     for k, v := range player_inventory.ID {
@@ -2606,9 +2675,16 @@ func BlockRandomUpdates(c *Chunk, p iVec2) {
             case GRASS:
                 if c.block[i][j+1][k] == AIR {
                     if len(Entities) < 30 {
-                        for i := 0; i < 6; i++ {
-                            MobSpawn(p.x + i, j + 10, p.y + k, MOBID_DUCK)
-                            //~ MobSpawn(p.x + i, j + 10, p.y + k, MOBID_BEE)
+                        
+                        switch rand.Intn(2) {
+                        case 0:
+                            for i := 0; i < 6; i++ {
+                                MobSpawn(p.x + i, j + 10, p.y + k, MOBID_DUCK)
+                            }                            
+                        case 1:
+                            for i := 0; i < 6; i++ {
+                                MobSpawn(p.x + i, j + 10, p.y + k, MOBID_BEE)
+                            }
                         }
                     }
                 }
@@ -2640,8 +2716,6 @@ func BlockRandomUpdates(c *Chunk, p iVec2) {
     }
 }
 
-
-//~ var AirIndexes [][3]int
 func lightUpdate(c *Chunk, p iVec2, sunlight uint8) {
     
     const DEBUG = false
@@ -2674,7 +2748,7 @@ func lightUpdate(c *Chunk, p iVec2, sunlight uint8) {
                         hitopaque = true
                     }
                 } else {
-                    setLightVal(dx, dy, dz, lightLevels-1)
+                    setLightVal(dx, dy, dz, lightLevels-2)
                     if (b == AIR) || BlockIsLiquid[b] || (b == FLOWER) || (b == ICE) {
                         AirIndexes[i+overdraw][j+overdraw] = append(AirIndexes[i+overdraw][j+overdraw], k)
                     }
@@ -2682,7 +2756,6 @@ func lightUpdate(c *Chunk, p iVec2, sunlight uint8) {
             }
         }
     }
-    
     
     
     /* add an lightlevels x lightlevels x lightlevels area to the 
@@ -2936,9 +3009,6 @@ func terrain(p iVec2) {
         return
     }
 
-
-
-
     /* brick pillar */
     if (psrng2d(p.x, p.y) % 2000) == 0 {        
         for i := 0;  i < SUBCHUNK_H; i++ {
@@ -2951,7 +3021,6 @@ func terrain(p iVec2) {
         return
     } 
     
-
     vegetationNoise := func (nx, nz int) (uint32, bool) {
         var foo uint32
         var bar bool = false
@@ -3084,8 +3153,6 @@ func terrain(p iVec2) {
                     placeStone()
                     continue
                 }
-
-                
                 
                 var hscale float32 = 256.0*v_scale_variation //default: 68
                 const order = 3
@@ -3101,7 +3168,6 @@ func terrain(p iVec2) {
                 //~ highnoise = absAndOffset( fractalNoise3D(float32(nx+10000.0)/hscale, float32(j)/(hscale/2.0), float32(nz+10000.0)/hscale, order, 4, 0.25) )
                 lownoise  = absAndOffset( fractalNoise2D(float32(nx)/hscale, float32(nz)/hscale, order,  4, 0.25) )
                 highnoise = absAndOffset( fractalNoise2D(float32(nx+10000.0)/hscale, float32(nz+10000.0)/hscale, order, 4, 0.25) )
-                
                 
                 //~ if selectnoise < 0.33 {
                     //~ h = float32(continentality) + float32(seaBottom) + lownoise*(CHUNK_V/2);
@@ -3157,8 +3223,7 @@ func terrain(p iVec2) {
                 (i < (SUBCHUNK_H-4)) &&
                 (k > 4) &&
                 (k < (SUBCHUNK_H-4)) {
-                    
-                    
+
                     r := psrng3d(nx, v, nz)
                     
                     if wasteland {
@@ -4240,13 +4305,22 @@ func scheduleCrafting(c *Chunk, p iVec2) {
     }
     if c.blockInventories != nil {
         for k, v :=  range c.blockInventories {
-            if c.block[k.x][k.y][k.z] == CRAFTING_TABLE {
+            if (c.block[k.x][k.y][k.z] == CRAFTING_TABLE) || (c.block[k.x][k.y][k.z] == FURNACE) {
                 if len(c.blockInventories[k].ID) == 0 {
                     continue
                 }
                 if c.blockInventories[k].T > 100 {
                     bar := c.blockInventories[k]
-                    for _, rv := range crafting_table_recipes {
+                    
+                    var recipesource []Recipe
+                    
+                    if c.block[k.x][k.y][k.z] == CRAFTING_TABLE {
+                        recipesource = crafting_table_recipes
+                    } else {
+                        recipesource = furnace_recipes
+                    }
+                    
+                    for _, rv := range recipesource {
                         if checkForRecipe(rv, v) {
                             bar := c.blockInventories[k]
                             bar.T = 0
@@ -4280,7 +4354,19 @@ func scheduleCrafting(c *Chunk, p iVec2) {
                     bar.T++
                     c.blockInventories[k] = bar
                 }
-                //~ log.Println(c.blockInventories[k].T)
+                
+            } else {
+                /* if we are neither an furnace nor a crafting table drop everything */
+                bar := c.blockInventories[k]
+                for ik, _ := range c.blockInventories[k].ID {
+                    itemDrops = append(itemDrops, Drop{
+                        pos: Vec3{float32(p.x + int(k.x)), float32(k.y)+2.5, float32(p.y + int(k.z))},
+                        dir: Vec3{rand.Float32()-0.5,0.5,rand.Float32()-0.5},
+                        id: c.blockInventories[k].ID[ik],
+                        c: c.blockInventories[k].C[ik] })
+                    
+                    subtractFromIventory(bar.ID[ik], bar.C[ik], bar)
+                }
             }
         }
     }
@@ -5126,7 +5212,7 @@ func AABB(x, y, z, dx, dy, dz, height, fat float32, callback func(*BlockID, int,
     for i := -bb_range; i < bb_range; i++ {
         for j := -bb_range; j < bb_range; j++ {
             for k := -bb_range; k < bb_range; k++ {
-            
+                // collision through x
                 npbox.X = x + dx - fat
                 npbox.Y = y - height
                 npbox.Z = z - fat
@@ -5148,6 +5234,8 @@ func AABB(x, y, z, dx, dy, dz, height, fat float32, callback func(*BlockID, int,
                         }
                     }
                 }
+                
+                // collision through y
                 npbox.X = x - fat
                 npbox.Y = y + dy - height
                 npbox.Z = z - fat
@@ -5174,6 +5262,8 @@ func AABB(x, y, z, dx, dy, dz, height, fat float32, callback func(*BlockID, int,
                         }
                     }
                 }
+                
+                // collision through z
                 npbox.X = x - fat
                 npbox.Y = y - height
                 npbox.Z = z + dz - fat
@@ -5195,6 +5285,30 @@ func AABB(x, y, z, dx, dy, dz, height, fat float32, callback func(*BlockID, int,
                         }
                     }
                 }
+                
+                // collision through xz
+                npbox.X = x - fat
+                npbox.Y = y - height
+                npbox.Z = z + dz - fat
+                npbox.W = 2*fat
+                npbox.H = height
+                npbox.L = 2*fat
+                npbb.X = float32(int(x + dx)+i)
+                npbb.Y = float32(int(y     )+j)
+                npbb.Z = float32(int(z + dz)+k)
+                npbb.W = 1.0 + fat
+                npbb.H = 1.0 
+                npbb.L = 1.0 + fat
+                if chunkExists( int(x + dx)+i, int(y)+j, int(z + dz)+k ) {
+                    b := getBlockRef(int(x+dx)+i, int(y)+j, int(z+dz)+k)
+                    if !canWalkThrough[*b] {
+                        callback(b, int(x+dx)+i, int(y)+j, int(z+dz)+k)
+                        if intersect(npbox, npbb) {
+                            bx = false
+                            bz = false
+                        }
+                    }
+                }
             }
         }
     }
@@ -5207,7 +5321,34 @@ const bob_speed =  2.0
 //~ const bob_range = 0.005
 const bob_range = 0.01
 var walking_bob float32
+
+
+var holding_period bool
+var holding_comma bool
+
+/* this used to be just about player collision... */
 func playerCollision(window *glfw.Window) {
+
+    if (window.GetKey(glfw.KeyPeriod) == glfw.Press) && !holding_period {
+        drop_amount++
+        holding_period = true
+    }
+    if (window.GetKey(glfw.KeyPeriod) == glfw.Release) && holding_period {
+        
+        holding_period = false
+    }
+    
+    if (window.GetKey(glfw.KeyComma) == glfw.Press) && !holding_comma {
+        drop_amount--
+        if drop_amount <= 0 {
+            drop_amount = 1
+        }
+        holding_comma = true
+    }
+    if (window.GetKey(glfw.KeyComma) == glfw.Release) && holding_comma {
+        holding_comma = false
+    }    
+
 
     const speed = 0.14*0.90
     dir = Vec3{
@@ -5239,14 +5380,19 @@ func playerCollision(window *glfw.Window) {
     
     if (window.GetKey(glfw.KeyQ) == glfw.Press) && !holding_q {
         if (len(player_inventory.C) > 0) {
+            min := func (a, b int32) int32 {
+                if a > b { return b }
+                return a
+            }
+            
             itemDrops = append(itemDrops, Drop{
-                c: 1,
+                c: min(int32(drop_amount), player_inventory.C[selectedSlot]),
                 dir: dir,
                 id: player_inventory.ID[selectedSlot],
                 pos: player_pos,
                 rot: 0,
             })
-            player_inventory.C[selectedSlot]--
+            player_inventory.C[selectedSlot]-= min(int32(drop_amount), player_inventory.C[selectedSlot])
             if player_inventory.C[selectedSlot] == -1 {
                 selectedSlot = 0
             }
@@ -5367,6 +5513,22 @@ func playerCollision(window *glfw.Window) {
             z: player_pos.z + dir.z * float32(i)/4.0,
         }
         
+        
+        var entityInteraction = func (ek int) {
+            if (window.GetMouseButton(glfw.MouseButtonRight) == glfw.Press) && !mouse_holding_right {
+                mouse_holding_right = true  
+            }
+            if (window.GetMouseButton(glfw.MouseButtonRight) == glfw.Press) {
+                log.Println("teste\n")
+                if Entities[ek].id == MOBID_BEE {
+                    playerInventoryInsert(WAX, 1)
+                }
+                Entities[ek].hp = -1.0
+            }
+            if (window.GetMouseButton(glfw.MouseButtonRight) == glfw.Release) && mouse_holding_right {
+                mouse_holding_right = false
+            }
+        }
         var blockInteraction = func () {
             if (window.GetMouseButton(glfw.MouseButtonRight) == glfw.Press) && !mouse_holding_right {
                 mouse_holding_right = true  
@@ -5376,8 +5538,7 @@ func playerCollision(window *glfw.Window) {
                 blockid := int(getBlockVal(int(v.x), int(v.y), int(v.z)))
                 for bk, bv := range breakingBlocks {
                     if (bv.x == int(v.x)) && (bv.y == int(v.y)) && (bv.z == int(v.z)) {
-                        
-                        
+
                         if len(player_inventory.ID) > 0 {
                             if (player_inventory.ID[selectedSlot] == PICKAXE) && ( (blockid == STONE) || (blockid == COBBLE) || (blockid == FLESH) || (blockid == ORE_COAL) || (blockid == ORE_IRON) ) {
                                 breakingBlocks[bk].t+=2
@@ -5394,6 +5555,16 @@ func playerCollision(window *glfw.Window) {
                         break
                     }
                 }
+                
+                
+                for ek, ev := range Entities {
+                    if (int(ev.pos.x) == int(v.x)) && (int(ev.pos.y) == int(v.y)) && (int(ev.pos.z) == int(v.z)) {
+                        log.Println("teste\n")
+                        Entities[ek].hp = -1.0
+                    }
+                }
+                
+                
                 if new {
                     breakingBlocks = append(breakingBlocks, struct{x, y, z, t, id, elapsed int}{ int(v.x), int(v.y), int(v.z), 0, blockid, int(0) })
                 }
@@ -5488,6 +5659,13 @@ func playerCollision(window *glfw.Window) {
                 }
                 if b == LAVA {
                     drawBillboard(LAVA, 0, v.x, v.y, v.z, 2.0)
+                }
+            }
+            
+            for ek, ev := range Entities {
+                if (int(ev.pos.x) == int(v.x)) && (int(ev.pos.y) == int(v.y)) && (int(ev.pos.z) == int(v.z)) {
+                    entityInteraction(ek)
+                    goto exit_raycast
                 }
             }
             if (b != AIR) && (b != WATER) && (b != LAVA) {
