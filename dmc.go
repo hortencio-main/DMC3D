@@ -38,7 +38,8 @@ import (
     //~ "reflect"
 	
     //~ graphics
-	"github.com/go-gl/gl/v4.6-compatibility/gl"
+	//~ "github.com/go-gl/gl/v4.6-compatibility/gl"
+	"github.com/go-gl/gl/v3.3-compatibility/gl"
 	"github.com/go-gl/glfw/v3.3/glfw"
     //~ "github.com/go-gl/gl/v2.1/gl"
 
@@ -61,7 +62,7 @@ const (
     RENDER_DISTANCE = 8
     //~ CHUNK_V = 120
     //~ CHUNK_V = 120
-    CHUNK_V = 120
+    CHUNK_V = 255
 )
 
 type BlockID = uint16
@@ -99,6 +100,7 @@ const (
     FLESH
     OBSCURE
     CHEST
+    
     ERROR
     RAYTRACED_SPHERE
 )
@@ -119,6 +121,7 @@ const (
     INGOT
     LILY
     WAX
+    SIGN
     N_BLOCK_IDS
 )
 
@@ -634,9 +637,6 @@ bool intersectOctahedron(
     hitNormal = normalize(nMin);
     return true;
 }
-
-
-
 
 
 void main()
@@ -1607,6 +1607,12 @@ Options:
         log.Fatalln("failed to initialize glfw:", err)
     }
     defer glfw.Terminate()
+        
+    glfw.WindowHint(glfw.ContextVersionMajor, 3);
+    glfw.WindowHint(glfw.ContextVersionMinor, 3);
+    glfw.WindowHint(glfw.OpenGLProfile, glfw.OpenGLCompatProfile);
+    glfw.WindowHint(glfw.OpenGLForwardCompatible, 0);
+
     window, err := glfw.CreateWindow(800, 600, "DMC", nil, nil)
     if err != nil {
         log.Fatalln("failed to create window:", err)
@@ -1640,7 +1646,7 @@ Options:
     
     MainMenu(window)
     
-    player_pos = Vec3{1000+float32(rand.Uint32()%4000),CHUNK_V,1000+float32(rand.Uint32()%4000)}
+    player_pos = Vec3{1000+float32(rand.Uint32()%9000),CHUNK_V,1000+float32(rand.Uint32()%9000)}
     
     if _, err := os.Stat(fmt.Sprintf("%s/level.bin", saveSlot)); err == nil {
         log.Println("loaded save in ",saveSlot)
@@ -1648,6 +1654,8 @@ Options:
     }
     
     playerInventoryInsert(CRAFTING_TABLE, 1)
+    playerInventoryInsert(SIGN, 16)
+    //~ playerInventoryInsert(XRAY, 16)
     //~ playerInventoryInsert(CANDLE, 1)
     //~ playerInventoryInsert(STICK, 1)
     //~ playerInventoryInsert(GRASS_TUFF, 1)
@@ -1699,6 +1707,21 @@ Options:
 
         processBlockBreaking()
         
+        
+
+
+        
+        if (t%6) == 0 {
+            if window.GetKey(glfw.KeyLeftControl) == glfw.Press {
+                for key := glfw.KeyA; key <= glfw.KeyZ; key++ {
+                    if window.GetKey(key) == glfw.Press {
+                        letter := byte(rune('a' + (key - glfw.KeyA)))
+                        //~ log.Println("pressed: ",letter,"\n")
+                        player_textbuffer = append(player_textbuffer, letter)
+                    }
+                }
+            }
+        }
         
         if (t%3) == 0 {
             processBlockUpdates()
@@ -1824,7 +1847,6 @@ Options:
         }
 
 
-
         window.SwapBuffers()
     
         glfw.PollEvents()
@@ -1834,12 +1856,117 @@ Options:
     }
 }
 
+type Achievement struct {
+    name []byte
+    icon int
+}
+
+var title_d = [][]byte{
+    []byte("daemon"),
+    []byte("dancing"),
+    []byte("dartmouth"),
+    []byte("darwin"),
+    []byte("data"),
+    []byte("dictionary"),
+    []byte("date"),
+    []byte("doc"),
+    []byte("dotcom"),
+    []byte("dead"),
+    []byte("debug"),
+    []byte("decay"),
+    []byte("desktop"),
+    []byte("degree"),   
+    []byte("deflate"),
+    []byte("design"),
+    []byte("disk"),
+    []byte("dither"),
+    []byte("domain"),
+    []byte("dweeb"),
+}
+
+var title_m = [][]byte{
+    []byte("machine"),
+    []byte("macro"),
+    []byte("magic"),
+    []byte("magnetic"),
+    []byte("mail"),
+    []byte("malloc"),
+    []byte("mars"),
+    []byte("matrix"),
+    []byte("meme"),
+    []byte("meta"),
+    []byte("micro"),
+    []byte("miner"),
+    []byte("monitor"),
+    []byte("munch"),
+}
+
+var title_c = [][]byte{
+    []byte("call"),
+    []byte("calc"),
+    []byte("card"),
+    []byte("case"),
+    []byte("cast"),
+    []byte("cell"),
+    []byte("char"),
+    []byte("coax"),
+    []byte("code"),
+    []byte("com"),
+    []byte("command"),
+    []byte("computer"),
+    []byte("copper"),
+    []byte("clone"),
+    []byte("cyber"),
+}
 
 func MainMenu (window *glfw.Window) {
     
     var state int = 0
+    var selected int = 0
+    
+    var holding_up bool
+    var holding_down bool
+    var holding_enter bool
+    
+    var title string
+    newtitle := func() {
+        title = string(title_d[rand.Intn(len(title_d))])
+        title += " "
+        title += string(title_m[rand.Intn(len(title_m))])
+        title += " "
+        title += string(title_c[rand.Intn(len(title_c))])
+    }
+    tick := 0
+    
     
     for !window.ShouldClose() {
+
+        
+        
+        if (window.GetKey(glfw.KeyUp) == glfw.Press) && !holding_up {
+            selected--
+            holding_up = true
+        }
+        if (window.GetKey(glfw.KeyUp) == glfw.Release) && holding_up {
+            holding_up = false
+        }
+
+        if (window.GetKey(glfw.KeyDown) == glfw.Press) && !holding_down {
+            selected++
+            holding_down = true
+        }
+        if (window.GetKey(glfw.KeyDown) == glfw.Release) && holding_down {
+            holding_down = false
+        }
+
+        if (window.GetKey(glfw.KeyEnter) == glfw.Press) && !holding_enter {
+            holding_enter = true
+        }
+        if (window.GetKey(glfw.KeyEnter) == glfw.Release) && holding_enter {
+            holding_enter = false
+        }
+
+
 
         AdjustResolution(window)
         
@@ -1869,27 +1996,55 @@ func MainMenu (window *glfw.Window) {
             gl.TexCoord2f(0.0, 1.0); gl.Vertex2f( 1, -1)
         gl.End()
         
-        menu := [][]byte{
-            []byte("info"),
-            []byte("options"),
-            []byte("load"),
+        if selected < 0 {
+            selected = 0 
         }
         
-        gl.BindTexture(gl.TEXTURE_2D, atlas)        
-        gl.Begin(gl.QUADS)
         
         if state == 0 {
-        
-            DrawText([]byte("dmc"), 0, 5,float32(0.05))
+            if selected > 3 {
+               selected = 3 
+            }
+            
+            menu := [][]byte{
+                []byte("load"),
+                []byte("tutorial"),
+                []byte("achievements"),
+                []byte("quit"),
+            }
+
+            gl.BindTexture(gl.TEXTURE_2D, atlas)        
+            gl.Begin(gl.QUADS)
+                        
+            DrawText( []byte(title), 0, 5,float32(0.05))
+            
+            if (tick % 60) == 0 {
+                newtitle()
+            }
             
             for k, _ := range menu {
-                if k < 2 {
+                if k == selected {
                     gl.Color3f(0.75, 0.75, 0.75)
-                    } else {
+                } else {
                     gl.Color3f(1.0, 1.0, 1.0)
                 }
-                DrawText(menu[k], 0, float32(k),float32(0.05))
+                DrawText(menu[k], 0, float32(-k),float32(0.05))
             }
+            gl.End()
+
+            if (window.GetKey(glfw.KeyEnter) == glfw.Press) {
+                if selected == 0 {
+                    break
+                } else if selected == 1 {
+                    saveSlot = "saves/tutorial"
+                    break
+                } else if selected == 2 {
+                    
+                } else if selected == 3 {
+                    os.Exit(0)
+                }
+            }
+
             
         } else if state == 1 {
             
@@ -1897,7 +2052,6 @@ func MainMenu (window *glfw.Window) {
             
         }
     
-        gl.End()
         
         gl.Color3f(1.0, 1.0, 1.0)
         
@@ -1910,20 +2064,11 @@ func MainMenu (window *glfw.Window) {
 
         window.SwapBuffers()
         glfw.PollEvents()
-
-        if (window.GetKey(glfw.KeyEnter) == glfw.Press) {
-            break
-        }
         
-        if (window.GetKey(glfw.KeyEscape) == glfw.Press) {
-            os.Exit(0)
-        }
+        tick++
 
     }
 }
-
-
-
 
 func drawRaytraced() {
     if schedule_raytraced_blocks_p <= 0 {
@@ -1983,6 +2128,10 @@ func processBlockBreaking() {
         ORE_COAL:  300*3,
         ORE_IRON:  300*3,
         FLESH:    1500*3,
+        
+        CRAFTING_TABLE: 60*3,
+        FURNACE:       150*3,
+        PLANK: 60*3,
         
         RAYTRACED_SPHERE: 20000000,
         BEDROCK:20000000,
@@ -2152,8 +2301,13 @@ func processMobs() {
         mob_aabb_callback := func(b *BlockID, x, y, z int) { }
         valid_x, valid_y, valid_z, _ = AABB(v.pos.x,v.pos.y,v.pos.z,v.dir.x,v.dir.y,v.dir.z, 1.0, 0.3, mob_aabb_callback)
 
-        if getBlockVal(int(v.pos.x),int(v.pos.y),int(v.pos.z)) == WATER {
-            v.dir.y = 0.1
+
+        if chunkExists(int(v.pos.x),int(v.pos.y),int(v.pos.z)) {
+            if getBlockVal(int(v.pos.x),int(v.pos.y),int(v.pos.z)) == WATER {
+                v.dir.y = 0.1
+            }
+        } else {
+            continue
         }
 
         if v.state == MOB_JUMPING {
@@ -2498,6 +2652,8 @@ func DrawText (str []byte, x, y, s float32) {
 }
     
 var drop_amount int = 1
+var player_textbuffer []byte
+
 func DrawInventory() {
     gl.Disable(gl.DEPTH_TEST)
     gl.Disable(gl.CULL_FACE);
@@ -2526,6 +2682,7 @@ func DrawInventory() {
         SAPLING:        []byte("sapling"),
         CANDLE:         []byte("candle"),
         WAX:            []byte("wax"),
+        SIGN:           []byte("sign"),
         RAYTRACED_SPHERE: []byte("weird matter"),
     }
     
@@ -2587,9 +2744,12 @@ func DrawInventory() {
     
     gl.Color3f(1.0, 1.0, 1.0)
     
+    
     DrawText([]byte(fmt.Sprintf("health %d",30)),0,  -1, 1)
     DrawText([]byte(fmt.Sprintf("drop amount %d",drop_amount)),0, -2, 1)
     DrawText([]byte(fmt.Sprintf("mood %s",Emotions[0])),0,  -3, 1)
+    DrawText([]byte(fmt.Sprintf("speak %s",player_textbuffer)),0,  -4,1)
+    
     
     for k, v := range player_inventory.ID {
         if k == selectedSlot {
@@ -2973,6 +3133,7 @@ func putTree(x, y, z int) {
 var scheduleTree [][3]int
 var dirt_blocks []int
 func terrain(p iVec2) {
+    
     const DEBUG = false
     var start time.Time
     if DEBUG { start = time.Now() }
@@ -3009,12 +3170,30 @@ func terrain(p iVec2) {
         return
     }
 
+
+    /* the entire codebase assumes positive world coordinates */
+    if (p.x < 1000) || (p.y < 1000) {
+        for i := 0;  i < SUBCHUNK_H; i++ {
+            for j := 0;  j < CHUNK_V; j++ {
+                for k := 0;  k < SUBCHUNK_H; k++ {
+                    c.block[i][j][k] = AIR
+                }
+            }
+        }
+        return
+    }
+
+
     /* brick pillar */
     if (psrng2d(p.x, p.y) % 2000) == 0 {        
         for i := 0;  i < SUBCHUNK_H; i++ {
             for j := 0;  j < CHUNK_V; j++ {
                 for k := 0;  k < SUBCHUNK_H; k++ {
-                    c.block[i][j][k] = BRICK
+                    if j > 3 {
+                        c.block[i][j][k] = BRICK
+                    } else {
+                        c.block[i][j][k] = BEDROCK
+                    }
                 }
             }
         }
@@ -3116,8 +3295,8 @@ func terrain(p iVec2) {
                 placeStone := func() {
                     cavescale := float32(50)
                     n := noise3d(float32(nx+1333)/cavescale, float32(j)/(cavescale/3.0), float32(nz-1888)/cavescale)
-                    nn := float32(0.01)
-                    if (n > (0.5 - nn)) && (n < (0.5 + nn)) {
+                    nn := float32(0.02)
+                    if (n > (0.5 - nn)) && (n < (0.5 + nn)) && (j > 3) {
                         c.block[i][j][k] = AIR
                         return
                     }
@@ -3176,6 +3355,14 @@ func terrain(p iVec2) {
                 //~ } else {
                     //~ h = float32(continentality) + float32(seaBottom) + highnoise*(CHUNK_V/2);
                 //~ }
+                
+                if j > (seaLevel+3) {
+                    overhangscale := float32(30.0)
+                    overhangnoise := 2*fractalNoise3D(float32(nx)/overhangscale, float32(j)/overhangscale, float32(nz)/overhangscale, 2,  4, 0.25)
+                    h *= float32(overhangnoise)
+                }
+                
+                
                 
                 if (int(j) < int(h)) {
                     placeStone()
@@ -3676,7 +3863,18 @@ func DrawBlock ( id BlockID, x, y, z int) {
     }
 
 
-    if id == PAINTING {
+    if id == SIGN {
+        s := float32((7.0/8.0)/2.0)
+        v = [][4][3]float32{
+            {{0, 0.5, 0.5}, {1, 0.5, 0.5}, {1, 1, 0.5}, {0, 1, 0.5}}, // +Z
+            {{1, 0.5, 0.5}, {0, 0.5, 0.5}, {0, 1, 0.5}, {1, 1, 0.5}}, // -Z
+
+            {{0+s, 0.0, 0.5}, {1-s, 0.0, 0.5}, {1-s, 0.5, 0.5}, {0+s, 0.5, 0.5}}, // +Z
+            {{1-s, 0.0, 0.5}, {0+s, 0.0, 0.5}, {0+s, 0.5, 0.5}, {1-s, 0.5, 0.5}}, // -Z
+            
+        }
+    } else if id == PAINTING {
+        
         v = [][4][3]float32{
             {{1, 0, 1}, {1, 0, 0}, {1, 1, 0}, {1, 1, 1}}, // +X
             {{0, 0, 0}, {0, 0, 1}, {0, 1, 1}, {0, 1, 0}}, // -X
@@ -4219,7 +4417,7 @@ func drawScene() {
                     const LOD_THRESHOLD = (RENDER_DISTANCE/2)*SUBCHUNK_H
                     if v.d < (LOD_THRESHOLD*LOD_THRESHOLD) {
                         gl.CallList(neighbor[i][j].display_list)
-                        for l := 0; l < neighbor[i][j].uniform_index; l+=3 {                        
+                        for l := 0; l < neighbor[i][j].uniform_index; l+=3 {
                             schedule_raytraced_blocks[schedule_raytraced_blocks_p] = neighbor[i][j].uniform_array[l]+0.5
                             schedule_raytraced_blocks_p++
                             schedule_raytraced_blocks[schedule_raytraced_blocks_p] = neighbor[i][j].uniform_array[l+1]+0.5
@@ -4234,11 +4432,38 @@ func drawScene() {
                                     int(neighbor[i][j].uniform_array[l+1]),
                                     int(neighbor[i][j].uniform_array[l+2]))%uint32(len(shapes))]
                             schedule_raytraced_blocks_p++
+                        }                        
+                    }
+                }
+            }
+        }
+
+
+
+        for _,v := range chunk_render_order {
+            i := v.i
+            j := v.j
+            if neighbor[i][j] != nil {
+                if neighbor[i][j].display_list != 0 {
+                    const LOD_THRESHOLD = (RENDER_DISTANCE/2)*SUBCHUNK_H
+                    if v.d < (LOD_THRESHOLD*LOD_THRESHOLD) {
+                        /* rendering sign text out of the chunk drawing loop for correct blending */
+                        for key, _ := range neighbor[i][j].blockText {                            
+                            if getBlockVal(int(neighborp[i][j].x)+int(key.x), int(key.y), int(neighborp[i][j].y)+int(key.z)) != SIGN {
+                                neighbor[i][j].blockText[key] = nil
+                                continue
+                            }
+                            t_pos := Vec3{float32(neighborp[i][j].x)+float32(key.x), float32(key.y), float32(neighborp[i][j].y)+float32(key.z)}
+                            a := Angle2D(
+                                player_pos.x, player_pos.z, 
+                                t_pos.x, t_pos.z )
+                            DrawText3D(neighbor[i][j].blockText[key], t_pos.x, t_pos.y+1.5, t_pos.z+0.5, 0.25, 0, (3.14*270.0/180.0)-a, 0)
                         }
                     }
                 }
             }
         }
+        
 
         gl.Uniform1i(subpixelSnapUniformTextured, 0)
         for _,v := range chunk_render_order {
@@ -4262,7 +4487,7 @@ func drawScene() {
     
     /* TODO: PUT THIS IN THE MAIN FUNCTION */
     processMobs() 
-        DrawItemDrops()
+    DrawItemDrops()
     
     gl.Disable(gl.FOG);
 }
@@ -4373,6 +4598,13 @@ func scheduleCrafting(c *Chunk, p iVec2) {
 }
 
 
+// Angle2D returns the angle between p1 and p2 in radians.
+func Angle2D (x1, y1, x2, y2 float32) float32 {
+    dx := float64(x2 - x1)
+    dy := float64(y2 - y1)
+    return float32(math.Atan2(dy, dx)) // angle relative to X axis
+}
+
 func DrawItemDrops() {
     
     absf := func(f float32) float32 {
@@ -4392,13 +4624,6 @@ func DrawItemDrops() {
         
         drawCube(v.id, v.pos.x, v.pos.y + sinf(float32(TICK)/10.0)/50.0, v.pos.z, 0.25, 0, float32(TICK)/50.0, 0)
         
-        // Angle2D returns the angle between p1 and p2 in radians.
-        Angle2D := func (x1, y1, x2, y2 float32) float32 {
-            dx := float64(x2 - x1)
-            dy := float64(y2 - y1)
-            return float32(math.Atan2(dy, dx)) // angle relative to X axis
-        }
-        
         Taxicab := func(a, b Vec3) float32 {
             return absf(a.x-b.x)+absf(a.y-b.y)+absf(a.z-b.z)
         }
@@ -4408,7 +4633,6 @@ func DrawItemDrops() {
         
         a := Angle2D( player_pos.x, player_pos.z, v.pos.x, v.pos.z )
         DrawNumbers( v.c, v.pos.x, v.pos.y + 0.255, v.pos.z, 0.25, 0, (3.14*270.0/180.0)-a, 0)
-        
         
         var npbb BoundingBox
         var ibox BoundingBox        
@@ -4424,7 +4648,6 @@ func DrawItemDrops() {
         var nearestDistance int
         nearestDistance = 99999
         var nearestCraftingTable [3]int
-
 
         traversible := [N_BLOCK_IDS]bool{
             AIR:true,
@@ -4443,7 +4666,6 @@ func DrawItemDrops() {
                     ny := yi+j
                     nz := zi+k
                     
-                    
                     if ny > (CHUNK_V - bb_range - 1) {
                         continue
                     }
@@ -4451,10 +4673,7 @@ func DrawItemDrops() {
                         continue
                     }
                     
-                    //~ log.Println(nx, ny, nz)
-                    
-                    
-                    if getBlockVal(nx, ny, nz) == CRAFTING_TABLE {
+                    if b := getBlockVal(nx, ny, nz); (b == CRAFTING_TABLE) || (b == FURNACE) {
                         nearbyinventoryblock = true
                         d := Taxicabi([3]int{nx,ny,nz}, [3]int{xi,yi,zi})
                         if nearestDistance > d {
@@ -5127,7 +5346,120 @@ func DrawNumbers(num int32, x, y, z, size, ax, ay, az float32) {
         if n == 0 {
             break
         }
+    }    
+    
+    gl.End()
+}
+
+func DrawText3D(str []byte, x, y, z, size, ax, ay, az float32) {
+    
+    texHPos := func(face uint32) float32 {
+        return float32(face) * (16.0 / 1024.0)
     }
+    textVPos := func(id BlockID) float32 {
+        return float32(id) * (16.0 / 1024.0)
+    }
+    
+    // Original cube vertex positions (unit cube)
+    var v = [6][4][3]float32{
+        {{ 0.5,-0.5, 0.5}, { 0.5,-0.5,-0.5}, { 0.5, 0.5,-0.5}, { 0.5, 0.5, 0.5}}, // +X
+        {{-0.5,-0.5,-0.5}, {-0.5,-0.5, 0.5}, {-0.5, 0.5, 0.5}, {-0.5, 0.5,-0.5}}, // -X
+        {{-0.5, 0.5,-0.5}, {-0.5, 0.5, 0.5}, { 0.5, 0.5, 0.5}, { 0.5, 0.5,-0.5}}, // +Y
+        {{-0.5,-0.5,-0.5}, { 0.5,-0.5,-0.5}, { 0.5,-0.5, 0.5}, {-0.5,-0.5, 0.5}}, // -Y
+        {{-0.5,-0.5, 0.5}, { 0.5,-0.5, 0.5}, { 0.5, 0.5, 0.5}, {-0.5, 0.5, 0.5}}, // +Z
+        {{ 0.5,-0.5,-0.5}, {-0.5,-0.5,-0.5}, {-0.5, 0.5,-0.5}, { 0.5, 0.5,-0.5}}, // -Z
+    }
+
+    // Precompute sine/cosine
+    sx, cx := float32(math.Sin(float64(ax))), float32(math.Cos(float64(ax)))
+    sy, cy := float32(math.Sin(float64(ay))), float32(math.Cos(float64(ay)))
+    sz, cz := float32(math.Sin(float64(az))), float32(math.Cos(float64(az)))
+
+    rotate := func(px, py, pz float32) (float32, float32, float32) {
+        // Rotate X
+        y1 := py*cx - pz*sx
+        z1 := py*sx + pz*cx
+        x1 := px
+        // Rotate Y
+        x2 := x1*cy + z1*sy
+        z2 := -x1*sy + z1*cy
+        y2 := y1
+        // Rotate Z
+        x3 := x2*cz - y2*sz
+        y3 := x2*sz + y2*cz
+        z3 := z2
+        return x3, y3, z3
+    }
+    
+    v2 := textVPos(0)
+    v3 := textVPos(1)
+
+    // Precompute all rotated vertices once
+    var rotated [6][4][3]float32
+    for f := 0; f < 6; f++ {
+        for i := 0; i < 4; i++ {
+            rx, ry, rz := rotate(v[f][i][0]*size, v[f][i][1]*size, v[f][i][2]*size)
+            rotated[f][i][0] = rx
+            rotated[f][i][1] = ry
+            rotated[f][i][2] = rz
+        }
+    }
+    
+    //~ n := num
+    //~ i := 0
+    //~ t := float32(int(math.Log10(float64(num))))
+    //~ if t == 0 {
+        //~ t = 1
+    //~ }
+
+    gl.Begin(gl.QUADS)
+    
+    //~ for {
+        //~ m := n%10
+        //~ const camside = 4
+        //~ n0 := texHPos(uint32(6 + m + 1))
+        //~ n1 := texHPos(uint32(6 + m))
+        //~ gl.TexCoord2f(n1, v3); gl.Vertex3f(x+rotated[camside][0][0]/t-float32(i)*size, y+rotated[camside][0][1], z+rotated[camside][0][2]/t)
+        //~ gl.TexCoord2f(n0, v3); gl.Vertex3f(x+rotated[camside][1][0]/t-float32(i)*size, y+rotated[camside][1][1], z+rotated[camside][1][2]/t)
+        //~ gl.TexCoord2f(n0, v2); gl.Vertex3f(x+rotated[camside][2][0]/t-float32(i)*size, y+rotated[camside][2][1], z+rotated[camside][2][2]/t)
+        //~ gl.TexCoord2f(n1, v2); gl.Vertex3f(x+rotated[camside][3][0]/t-float32(i)*size, y+rotated[camside][3][1], z+rotated[camside][3][2]/t)
+        //~ n /= 10
+        //~ i++
+        //~ if n == 0 {
+            //~ break
+        //~ }
+    //~ }
+
+    for k, v := range str {
+        const camside = 4
+
+        var n0 float32
+        var n1 float32
+        
+        if v == ' ' {
+            continue
+        } else if  (v >= '0') && (v <= '9') {
+            //~ d(AIR, float32(FONT_0 + (v - '0')), float32(k)*s, y, 0)
+            
+            n0 = texHPos( uint32(FONT_0 + (v - '0')+1))
+            n1 = texHPos( uint32(FONT_0 + (v - '0')))
+            
+        } else if (v >= 'a') && (v <= 'z')  {
+            //~ d(AIR, float32(FONT_A + (v - 'a')), float32(k)*s - midpadh, y*s, 0)
+            
+            n0 = texHPos( uint32(FONT_A + (v - 'a')+1))
+            n1 = texHPos( uint32(FONT_A + (v - 'a')))
+        }
+        
+        kf := float32(1)
+        gl.TexCoord2f(n1, v3); gl.Vertex3f(x+rotated[camside][0][0]/kf+float32(k)*size, y+rotated[camside][0][1], z+rotated[camside][0][2]/kf)
+        gl.TexCoord2f(n0, v3); gl.Vertex3f(x+rotated[camside][1][0]/kf+float32(k)*size, y+rotated[camside][1][1], z+rotated[camside][1][2]/kf)
+        gl.TexCoord2f(n0, v2); gl.Vertex3f(x+rotated[camside][2][0]/kf+float32(k)*size, y+rotated[camside][2][1], z+rotated[camside][2][2]/kf)
+        gl.TexCoord2f(n1, v2); gl.Vertex3f(x+rotated[camside][3][0]/kf+float32(k)*size, y+rotated[camside][3][1], z+rotated[camside][3][2]/kf)
+        
+    }
+
+    
     gl.End()
 }
 
@@ -5315,8 +5647,6 @@ func AABB(x, y, z, dx, dy, dz, height, fat float32, callback func(*BlockID, int,
     return bx, by, bz, vertical_collision_type
 }
 
-
-
 const bob_speed =  2.0
 //~ const bob_range = 0.005
 const bob_range = 0.01
@@ -5326,8 +5656,31 @@ var walking_bob float32
 var holding_period bool
 var holding_comma bool
 
+
+func setBlockText(x, y, z int, s []byte) {
+    c := World[iVec2{x-x%SUBCHUNK_H,z-z%SUBCHUNK_H}]
+    
+    if c.blockText == nil {
+        c.blockText = make(map[nearVec][]byte)
+    }
+    c.blockText[nearVec{uint8(x%SUBCHUNK_H), uint8(y), uint8(z%SUBCHUNK_H)}] = s
+}
+
+func getBlockText(x, y, z int) []byte {
+    c := World[iVec2{x-x%SUBCHUNK_H,z-z%SUBCHUNK_H}]
+    v, e := c.blockText[nearVec{uint8(x%SUBCHUNK_H), uint8(y), uint8(z%SUBCHUNK_H)}]
+    if e {
+        return v
+    } else {
+        return []byte("")
+    }
+}
+
+
 /* this used to be just about player collision... */
 func playerCollision(window *glfw.Window) {
+
+
 
     if (window.GetKey(glfw.KeyPeriod) == glfw.Press) && !holding_period {
         drop_amount++
@@ -5347,8 +5700,7 @@ func playerCollision(window *glfw.Window) {
     }
     if (window.GetKey(glfw.KeyComma) == glfw.Release) && holding_comma {
         holding_comma = false
-    }    
-
+    }
 
     const speed = 0.14*0.90
     dir = Vec3{
@@ -5359,24 +5711,30 @@ func playerCollision(window *glfw.Window) {
     
     np := Vec3{player_velocity.x,player_velocity.y,player_velocity.z}
     
-    if window.GetKey(glfw.KeyW) == glfw.Press {
-        np.x += cosf(cam_yaw) * speed
-        np.z += sinf(cam_yaw) * speed
+    
+    if window.GetKey(glfw.KeyLeftControl) == glfw.Press {
+        /* for now the handling of key ctrl stays on main */
+    } else {
+        if window.GetKey(glfw.KeyW) == glfw.Press {
+            np.x += cosf(cam_yaw) * speed
+            np.z += sinf(cam_yaw) * speed
+        }
+        
+        if window.GetKey(glfw.KeyD) == glfw.Press {
+            np.x += cosf(cam_yaw+1.57) * (speed/1.2)
+            np.z += sinf(cam_yaw+1.57) * (speed/1.2)
+        }
+        if window.GetKey(glfw.KeyA) == glfw.Press {
+            np.x += cosf(cam_yaw-1.57) * (speed/1.2)
+            np.z += sinf(cam_yaw-1.57) * (speed/1.2)
+        }
+        
+        if window.GetKey(glfw.KeyS) == glfw.Press {
+            np.x += -cosf(cam_yaw) * speed
+            np.z += -sinf(cam_yaw) * speed
+        }
     }
     
-    if window.GetKey(glfw.KeyD) == glfw.Press {
-        np.x += cosf(cam_yaw+1.57) * (speed/1.2)
-        np.z += sinf(cam_yaw+1.57) * (speed/1.2)
-    }
-    if window.GetKey(glfw.KeyA) == glfw.Press {
-        np.x += cosf(cam_yaw-1.57) * (speed/1.2)
-        np.z += sinf(cam_yaw-1.57) * (speed/1.2)
-    }
-    
-    if window.GetKey(glfw.KeyS) == glfw.Press {
-        np.x += -cosf(cam_yaw) * speed
-        np.z += -sinf(cam_yaw) * speed
-    }
     
     if (window.GetKey(glfw.KeyQ) == glfw.Press) && !holding_q {
         if (len(player_inventory.C) > 0) {
@@ -5453,7 +5811,7 @@ func playerCollision(window *glfw.Window) {
         np.y,
         np.z,
         1.5,
-        0.25, player_aabb_callback)
+        0.125, player_aabb_callback) /* previous fat: 0.25 */
         
     if (valid_position_x || valid_position_z) && (!valid_position_y) {
         abs := func(f float32) float32 {
@@ -5467,11 +5825,6 @@ func playerCollision(window *glfw.Window) {
         (window.GetKey(glfw.KeyA) == glfw.Press) ||
         (window.GetKey(glfw.KeyS) == glfw.Press) ||
         (window.GetKey(glfw.KeyD) == glfw.Press) {
-            //~ PlayTone(TONE_TRIANGLE,  10, 0.1)
-            //~ PlayTone(TONE_SINE,  100, 0.1)
-            //~ PlayTone(TONE_SINE,  500*float64(abs(np.x) + abs(np.z))+20*float64(getBlockVal(int(player_pos.x),int(player_pos.y-2),int(player_pos.z))), 0.1)
-            //~ PlayTone(TONE_TRIANGLE, 160, 0.1)
-            //~ PlayTone(TONE_SQUARE, 640, 0.1)
         }
         
         if abs(np.x) > abs(np.z) {
@@ -5519,7 +5872,7 @@ func playerCollision(window *glfw.Window) {
                 mouse_holding_right = true  
             }
             if (window.GetMouseButton(glfw.MouseButtonRight) == glfw.Press) {
-                log.Println("teste\n")
+                //~ log.Println("teste\n")
                 if Entities[ek].id == MOBID_BEE {
                     playerInventoryInsert(WAX, 1)
                 }
@@ -5540,11 +5893,40 @@ func playerCollision(window *glfw.Window) {
                     if (bv.x == int(v.x)) && (bv.y == int(v.y)) && (bv.z == int(v.z)) {
 
                         if len(player_inventory.ID) > 0 {
-                            if (player_inventory.ID[selectedSlot] == PICKAXE) && ( (blockid == STONE) || (blockid == COBBLE) || (blockid == FLESH) || (blockid == ORE_COAL) || (blockid == ORE_IRON) ) {
-                                breakingBlocks[bk].t+=2
+                            //~ if (player_inventory.ID[selectedSlot] == PICKAXE) && ( (blockid == STONE) || (blockid == COBBLE) || (blockid == FLESH) || (blockid == ORE_COAL) || (blockid == ORE_IRON) ) {
+                                //~ breakingBlocks[bk].t+=2
+                            //~ } else {
+                                //~ breakingBlocks[bk].t++
+                            //~ }
+                            
+                            if (player_inventory.ID[selectedSlot] == PICKAXE) {
+                                switch blockid {
+                                case BRICK, FURNACE, STONE, COBBLE, FLESH, ORE_COAL, ORE_IRON:
+                                    breakingBlocks[bk].t+=2
+                                default:
+                                    breakingBlocks[bk].t++
+                                }
+                                
+                            } else if (player_inventory.ID[selectedSlot] == SHOVEL) {
+                                switch blockid {
+                                case DIRT, MOON, CLAY, SAND:
+                                    breakingBlocks[bk].t+=2
+                                default:
+                                    breakingBlocks[bk].t++
+                                }
+                                
+                            } else if (player_inventory.ID[selectedSlot] == AXE) {
+                                switch blockid {
+                                case SIGN, WOOD, PLANK, CRAFTING_TABLE:
+                                    breakingBlocks[bk].t+=2
+                                default:
+                                    breakingBlocks[bk].t++
+                                }
                             } else {
                                 breakingBlocks[bk].t++
+                                
                             }
+                            
                         } else {
                             breakingBlocks[bk].t++
                         }
@@ -5559,7 +5941,7 @@ func playerCollision(window *glfw.Window) {
                 
                 for ek, ev := range Entities {
                     if (int(ev.pos.x) == int(v.x)) && (int(ev.pos.y) == int(v.y)) && (int(ev.pos.z) == int(v.z)) {
-                        log.Println("teste\n")
+                        //~ log.Println("teste\n")
                         Entities[ek].hp = -1.0
                     }
                 }
@@ -5631,11 +6013,17 @@ func playerCollision(window *glfw.Window) {
                     if (len(player_inventory.C)>0) {
                         *b = player_inventory.ID[selectedSlot]
                         updateSpread(int(v.x  ), int(v.y  ), int(v.z  ))
-                        chunkUpdateDisplaylist(int(v.x)+d[0], int(v.y)+d[1], int(v.z)+d[2])                    
+                        chunkUpdateDisplaylist(int(v.x)+d[0], int(v.y)+d[1], int(v.z)+d[2])
                     
                         player_inventory.C[selectedSlot]--
                         inventoryClearEmpty(&player_inventory)
                         
+                        /* special block placing actions... */
+                        if player_inventory.ID[selectedSlot] == SIGN {
+                            setBlockText(int(v.x)+d[0],int(v.y)+d[1],int(v.z)+d[2], player_textbuffer)
+                            player_textbuffer = player_textbuffer[:0]
+                        }
+
                         if selectedSlot >= len(player_inventory.ID) {
                            selectedSlot =  len(player_inventory.ID) - 1
                         }
